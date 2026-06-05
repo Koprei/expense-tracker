@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Trip Report</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: #f0f4f8; min-height: 100vh; padding: 1.25rem; }
+  .card { background: #fff; border-radius: 20px; padding: 1.5rem; max-width: 540px; margin: 0 auto 1rem; box-shadow: 0 4px 24px rgba(0,0,0,.07); }
+  .back-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #64748b; background: #f1f5f9; border: none; border-radius: 8px; padding: 6px 12px; cursor: pointer; margin-bottom: 1rem; font-family: 'DM Sans', sans-serif; }
+  h1 { font-size: 20px; font-weight: 600; color: #0f172a; }
+  .trip-sub { font-size: 13px; color: #94a3b8; margin-top: 3px; }
+
+  .total-box { background: #0f172a; border-radius: 14px; padding: 1.1rem; text-align: center; margin: 1.25rem 0; }
+  .total-box .lbl { font-size: 10px; letter-spacing: .1em; color: #64748b; text-transform: uppercase; }
+  .total-box .amt { font-size: 30px; font-weight: 600; color: #fff; margin-top: 4px; }
+  .total-box .amt2 { font-size: 14px; color: #64748b; margin-top: 2px; }
+
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 1rem; }
+  .stat-box { background: #f8fafc; border-radius: 12px; padding: .85rem 1rem; }
+  .stat-box .lbl { font-size: 10px; font-weight: 600; letter-spacing: .07em; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px; }
+  .stat-box .val { font-size: 18px; font-weight: 600; color: #0f172a; }
+  .stat-box .sub { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+
+  .sec { font-size: 10px; font-weight: 600; letter-spacing: .08em; color: #94a3b8; text-transform: uppercase; margin-bottom: .75rem; margin-top: 1.25rem; }
+
+  /* Category breakdown */
+  .cat-row { display: flex; align-items: center; gap: 10px; margin-bottom: .6rem; }
+  .cat-row .cat-label { font-size: 13px; color: #0f172a; width: 130px; flex-shrink: 0; }
+  .cat-bar-wrap { flex: 1; background: #f1f5f9; border-radius: 20px; height: 8px; overflow: hidden; }
+  .cat-bar { height: 8px; border-radius: 20px; background: #0f172a; transition: width .4s; }
+  .cat-row .cat-amt { font-size: 13px; font-weight: 500; color: #0f172a; width: 70px; text-align: right; flex-shrink: 0; }
+
+  /* Person breakdown */
+  .person-row { display: flex; justify-content: space-between; align-items: center; padding: .6rem 0; border-bottom: 1px solid #f1f5f9; }
+  .person-row:last-child { border-bottom: none; }
+  .person-row .name { font-size: 14px; font-weight: 500; color: #0f172a; }
+  .person-row .pct { font-size: 12px; color: #94a3b8; }
+  .person-row .pamount { font-size: 15px; font-weight: 600; color: #0f172a; }
+
+  /* Daily spending */
+  .day-row { display: flex; justify-content: space-between; align-items: center; padding: .55rem 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+  .day-row:last-child { border-bottom: none; }
+  .day-row .date { color: #64748b; }
+  .day-row .damount { font-weight: 600; color: #0f172a; }
+
+  /* Full expense list */
+  .entry { display: flex; justify-content: space-between; align-items: center; padding: .6rem 0; border-bottom: 1px solid #f1f5f9; }
+  .entry:last-child { border-bottom: none; }
+  .entry-left .desc { font-size: 14px; font-weight: 500; color: #0f172a; }
+  .entry-left .meta { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+  .entry-right { text-align: right; }
+  .entry-right .price { font-size: 14px; font-weight: 600; color: #0f172a; }
+  .entry-right .who { font-size: 12px; color: #94a3b8; }
+
+  .chart-wrap { position: relative; height: 220px; margin: .5rem 0 1rem; }
+  .empty { text-align: center; color: #94a3b8; font-size: 13px; padding: 2rem 0; }
+  .loading { text-align: center; color: #94a3b8; font-size: 13px; padding: 2rem 0; }
+
+  .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 600; margin-left: 6px; }
+  .badge-husband { background: #dbeafe; color: #1d4ed8; }
+  .badge-wife { background: #fce7f3; color: #be185d; }
+  .badge-shared { background: #dcfce7; color: #16a34a; }
+</style>
+</head>
+<body>
+
+<div style="max-width:540px;margin:0 auto;">
+  <button class="back-btn" onclick="window.location.href='index.html'">← Back to tracker</button>
+</div>
+
+<div class="card" id="mainCard">
+  <div class="loading">Loading report...</div>
+</div>
+
+<script>
+// ── CONFIGURE THESE TWO LINES ──────────────────────────────────────────
+const SUPABASE_URL = 'https://atgmwnxtfycifxqatbta.supabase.co';
+const SUPABASE_KEY = 'YOUR_ANON_KEY_HERE';
+// ──────────────────────────────────────────────────────────────────────
+
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const params      = new URLSearchParams(window.location.search);
+const tripName    = params.get('trip') || localStorage.getItem('trip_name') || '';
+const localCur    = localStorage.getItem('trip_localCur') || 'KHR';
+const localSym    = localStorage.getItem('trip_localSym') || '៛';
+const exRate      = parseFloat(localStorage.getItem('trip_rate')) || 4100;
+
+const CAT_COLORS = {
+  'Food & Dining':  '#f97316',
+  'Transport':      '#3b82f6',
+  'Accommodation':  '#8b5cf6',
+  'Activities':     '#10b981',
+  'Shopping':       '#ec4899',
+  'Health':         '#ef4444',
+  'Communication':  '#06b6d4',
+  'Other':          '#94a3b8'
+};
+
+async function loadReport() {
+  if (!tripName) {
+    document.getElementById('mainCard').innerHTML = '<div class="empty">No trip selected. Go back and select a trip.</div>';
+    return;
+  }
+
+  const { data, error } = await db
+    .from('expenses')
+    .select('*')
+    .eq('trip_name', tripName)
+    .order('expense_date', { ascending: true });
+
+  if (error) {
+    document.getElementById('mainCard').innerHTML = '<div class="empty">Error loading data: ' + error.message + '</div>';
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    document.getElementById('mainCard').innerHTML = '<div class="empty">No expenses recorded for this trip yet.</div>';
+    return;
+  }
+
+  buildReport(data);
+}
+
+function buildReport(rows) {
+  const totalUSD   = rows.reduce((s,r) => s + parseFloat(r.amount_usd || r.amount || 0), 0);
+  const totalLocal = totalUSD * exRate;
+  const days       = new Set(rows.map(r => r.expense_date)).size;
+  const avgPerDay  = days > 0 ? totalUSD / days : 0;
+
+  // By category
+  const byCat = {};
+  rows.forEach(r => {
+    const cat = r.category || 'Other';
+    byCat[cat] = (byCat[cat] || 0) + parseFloat(r.amount_usd || r.amount || 0);
+  });
+  const catSorted = Object.entries(byCat).sort((a,b) => b[1]-a[1]);
+  const maxCat    = catSorted[0]?.[1] || 1;
+
+  // By person
+  const byPerson = {};
+  rows.forEach(r => {
+    const p = r.spent_by || r.spend_by || 'Unknown';
+    byPerson[p] = (byPerson[p] || 0) + parseFloat(r.amount_usd || r.amount || 0);
+  });
+
+  // By day
+  const byDay = {};
+  rows.forEach(r => {
+    byDay[r.expense_date] = (byDay[r.expense_date] || 0) + parseFloat(r.amount_usd || r.amount || 0);
+  });
+  const daySorted = Object.entries(byDay).sort((a,b) => a[0].localeCompare(b[0]));
+
+  const card = document.getElementById('mainCard');
+  card.innerHTML = `
+    <button class="back-btn" onclick="window.location.href='index.html'">← Back to tracker</button>
+    <h1>Trip Report</h1>
+    <p class="trip-sub">✈️ ${tripName}</p>
+
+    <div class="total-box">
+      <div class="lbl">Total Spent</div>
+      <div class="amt">$${totalUSD.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+      <div class="amt2">≈ ${localSym}${totalLocal.toLocaleString('en',{maximumFractionDigits:0})}</div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-box">
+        <div class="lbl">Expenses logged</div>
+        <div class="val">${rows.length}</div>
+        <div class="sub">entries total</div>
+      </div>
+      <div class="stat-box">
+        <div class="lbl">Days tracked</div>
+        <div class="val">${days}</div>
+        <div class="sub">avg $${avgPerDay.toFixed(2)}/day</div>
+      </div>
+      <div class="stat-box">
+        <div class="lbl">Top category</div>
+        <div class="val" style="font-size:14px;">${catSorted[0]?.[0] || '—'}</div>
+        <div class="sub">$${(catSorted[0]?.[1]||0).toFixed(2)}</div>
+      </div>
+      <div class="stat-box">
+        <div class="lbl">Local currency</div>
+        <div class="val" style="font-size:14px;">${localCur}</div>
+        <div class="sub">1 USD = ${exRate} ${localCur}</div>
+      </div>
+    </div>
+
+    <div class="sec">Spending by category</div>
+    <div class="chart-wrap"><canvas id="catChart"></canvas></div>
+    ${catSorted.map(([cat, amt]) => `
+      <div class="cat-row">
+        <div class="cat-label">${cat}</div>
+        <div class="cat-bar-wrap"><div class="cat-bar" style="width:${(amt/maxCat*100).toFixed(1)}%;background:${CAT_COLORS[cat]||'#0f172a'}"></div></div>
+        <div class="cat-amt">$${amt.toFixed(2)}</div>
+      </div>`).join('')}
+
+    <div class="sec">Spending by person</div>
+    ${Object.entries(byPerson).map(([p, amt]) => {
+      const pct = totalUSD > 0 ? (amt/totalUSD*100).toFixed(0) : 0;
+      const cls = p === 'Husband' ? 'badge-husband' : p === 'Wife' ? 'badge-wife' : 'badge-shared';
+      return `<div class="person-row">
+        <div><span class="name">${p}</span><span class="badge ${cls}">${pct}%</span></div>
+        <div class="pamount">$${amt.toFixed(2)}</div>
+      </div>`;
+    }).join('')}
+
+    <div class="sec">Daily spending</div>
+    ${daySorted.map(([date, amt]) => `
+      <div class="day-row">
+        <div class="date">${date}</div>
+        <div class="damount">$${amt.toFixed(2)} <span style="font-size:11px;color:#94a3b8;">≈ ${localSym}${(amt*exRate).toLocaleString('en',{maximumFractionDigits:0})}</span></div>
+      </div>`).join('')}
+
+    <div class="sec">All expenses</div>
+    ${[...rows].reverse().map(r => {
+      const usd  = parseFloat(r.amount_usd || r.amount || 0);
+      const disp = r.currency === localCur
+        ? localSym + parseFloat(r.amount_local||0).toLocaleString('en',{maximumFractionDigits:0})
+        : '$' + usd.toFixed(2);
+      const cls = (r.spent_by||r.spend_by||'') === 'Husband' ? 'badge-husband' : (r.spent_by||r.spend_by||'') === 'Wife' ? 'badge-wife' : 'badge-shared';
+      return `<div class="entry">
+        <div class="entry-left">
+          <div class="desc">${r.description}</div>
+          <div class="meta">${r.category} · ${r.expense_date}</div>
+        </div>
+        <div class="entry-right">
+          <div class="price">${disp}</div>
+          <div class="who"><span class="badge ${cls}">${r.spent_by||r.spend_by||''}</span></div>
+        </div>
+      </div>`;
+    }).join('')}
+  `;
+
+  // Doughnut chart
+  new Chart(document.getElementById('catChart'), {
+    type: 'doughnut',
+    data: {
+      labels: catSorted.map(c => c[0]),
+      datasets: [{
+        data: catSorted.map(c => c[1]),
+        backgroundColor: catSorted.map(c => CAT_COLORS[c[0]] || '#94a3b8'),
+        borderWidth: 2,
+        borderColor: '#fff'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'right', labels: { font: { family: 'DM Sans', size: 12 }, boxWidth: 12, padding: 12 } },
+        tooltip: {
+          callbacks: {
+            label: ctx => ' $' + ctx.parsed.toFixed(2) + ' (' + (ctx.parsed/totalUSD*100).toFixed(0) + '%)'
+          }
+        }
+      }
+    }
+  });
+}
+
+loadReport();
+</script>
+</body>
+</html>
